@@ -1,0 +1,15 @@
+#!/bin/bash
+# Rebuilds the podman GPU config for the GPUs this booking really has.
+# Ubuntu's podman 4.9 needs the older format: version 0.6.0, no additionalGids.
+set -e
+rm -f /var/run/cdi/nvidia.yaml
+nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml >/dev/null 2>&1
+python3 - <<'PY'
+import re
+p = '/etc/cdi/nvidia.yaml'
+s = open(p).read()
+s = re.sub(r'^\s*additionalGids:\n(\s*- \d+\n)+', '', s, flags=re.M)
+s = re.sub(r'^cdiVersion: .*$', 'cdiVersion: 0.6.0', s, flags=re.M)
+open(p, 'w').write(s)
+PY
+chmod 644 /etc/cdi/nvidia.yaml

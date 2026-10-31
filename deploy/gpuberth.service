@@ -1,0 +1,19 @@
+[Unit]
+Description=GPUBerth booking service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gpuberth
+WorkingDirectory=/opt/gpuberth/broker
+ExecStart=/opt/gpuberth/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080 --no-server-header
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/gpuberth
+
+[Install]
+WantedBy=multi-user.target

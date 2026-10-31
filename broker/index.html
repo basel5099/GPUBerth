@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPUBerth</title>
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--ink:#1d1f21;--mut:#6a6f75;--line:#dfe1e3;--acc:#0b6e4f;--warn:#a15c00;--bad:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#141618;--card:#1d2023;--ink:#e8e9ea;--mut:#9aa0a6;--line:#33373b;--acc:#4cc38a;--warn:#e0a84a;--bad:#f08a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+main{max-width:920px;margin:0 auto;padding:24px 16px}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:17px;margin:0 0 12px}
+.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
+.row{display:flex;flex-wrap:wrap;gap:24px}
+.k{color:var(--mut);font-size:13px}
+.v{font-size:18px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:500;border-top:0}
+.scroll{overflow-x:auto}
+button{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+button.main{background:var(--acc);border-color:var(--acc);color:#fff}
+input{font:inherit;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;max-width:420px}
+.ready{color:var(--acc);font-weight:600}.waiting_approval{color:var(--warn);font-weight:600}.failed{color:var(--bad);font-weight:600}
+.err{color:var(--bad)}
+.hide{display:none}
+form{display:flex;flex-wrap:wrap;gap:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>GPUBerth</h1>
+<p class="sub">Agents: read the <a href="/agent.md">booking guide</a>.</p>
+
+<section id="login" class="card">
+  <h2>Owner sign in</h2>
+  <form id="f"><input id="t" type="password" placeholder="Admin token" autocomplete="off" aria-label="Admin token"><button class="main">Sign in</button></form>
+  <p id="le" class="err"></p>
+</section>
+
+<div id="app" class="hide">
+  <section class="card">
+    <div class="row">
+      <div><div class="k">GPU host</div><div class="v" id="s-host">-</div></div>
+      <div><div class="k">GPUs in use by</div><div class="v" id="s-gpu">-</div></div>
+      <div><div class="k">GPUs free</div><div class="v" id="s-free">-</div></div>
+      <div><div class="k">Disk pool</div><div class="v" id="s-pool">-</div></div>
+      <div><div class="k">Shared disk</div><div class="v" id="s-shared">-</div></div>
+      <div><div class="k">Afterwards</div><div class="v" id="s-rest">-</div></div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="row" style="align-items:center;justify-content:space-between">
+      <div><h2 style="margin:0">Bookings allowed</h2><div class="k" id="s-block"></div></div>
+      <button id="b-block"></button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Bookings</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Agent</th><th>GPUs</th><th>Hours</th><th>Purpose</th><th>Status</th><th>Time left</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+</div>
+</main>
+<script>
+let token='';
+try{token=sessionStorage.getItem('t')||''}catch(e){}
+const $=id=>document.getElementById(id);
+async function api(path,method='GET',body){
+  const r=await fetch(path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(r.status===401)throw new Error('401');
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);
+  return r.json();
+}
+const left=s=>{if(s==null)return '';const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h+'h '+m+'m'};
+const after={owner:'Start owner VM',off:'Power off host',idle:'Leave on','':'Nothing pending'};
+function cell(tr,text,cls){const td=document.createElement('td');td.textContent=text;if(cls)td.className=cls;tr.append(td);return td}
+function btn(td,label,fn){const b=document.createElement('button');b.textContent=label;b.onclick=async()=>{await fn();load()};td.append(b)}
+async function load(){
+  let d;
+  try{d=await api('/api/admin/overview')}catch(e){
+    if(e.message==='401'){$('app').classList.add('hide');$('login').classList.remove('hide');if(token)$('le').textContent='Token not accepted';token=''}
+    return}
+  $('login').classList.add('hide');$('app').classList.remove('hide');
+  const h=d.host;
+  $('s-host').textContent=h?'On':'Off';
+  const seats=h?Object.values(h.seats).filter(Boolean).length:0;
+  $('s-gpu').textContent=!h?'Nobody':seats?seats+' agent VM'+(seats>1?'s':''):h.owner?'Owner VM':'Nobody';
+  $('s-free').textContent=(h&&h.owner?0:d.free_gpus)+' of '+d.total_gpus;
+  $('s-pool').textContent=h?h.pool_pct+'%':'-';
+  $('s-shared').textContent=h?h.shared_pct+'%':'-';
+  $('s-rest').textContent=after[d.restore]||d.restore;
+  $('s-block').textContent=d.block?'Blocked: nothing new starts':'Open: known agents start automatically';
+  const bb=$('b-block');bb.textContent=d.block?'Allow bookings':'Block bookings';
+  bb.onclick=async()=>{await api('/api/admin/block','POST',{on:!d.block});load()};
+  const rows=$('rows');rows.replaceChildren();
+  for(const b of d.bookings){
+    const tr=document.createElement('tr');
+    cell(tr,b.id);cell(tr,b.agent);cell(tr,b.gpus);cell(tr,b.hours);cell(tr,b.purpose);
+    cell(tr,b.status+(b.step?' ('+b.step+')':'')+(b.error?': '+b.error:''),b.status);
+    cell(tr,left(b.seconds_left));
+    const td=cell(tr,'');
+    if(b.status==='waiting_approval')btn(td,'Approve',()=>api('/api/admin/bookings/'+b.id+'/approve','POST'));
+    if(['queued','waiting_approval','starting','ready'].includes(b.status))btn(td,'Cancel',()=>api('/api/bookings/'+b.id,'DELETE'));
+    rows.append(tr);
+  }
+}
+$('f').onsubmit=e=>{e.preventDefault();token=$('t').value.trim();$('t').value='';try{sessionStorage.setItem('t',token)}catch(e){}load()};
+load();setInterval(()=>{if(token)load()},10000);
+</script>
+</body>
+</html>

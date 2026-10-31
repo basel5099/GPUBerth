@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Manage GPUBerth agents. Run on the broker as the service user."""
+import argparse
+import hashlib
+import os
+import re
+import secrets
+import sqlite3
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+os.environ.setdefault("GPUBERTH_CONFIG", "/etc/gpuberth/config.toml")
+import app  # noqa: E402
+
+
+def write_access_file(name, token, out):
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(app.render_guide(token, name))
+
+
+def add(args):
+    if not re.fullmatch(r"[a-z0-9-]{1,32}", args.name):
+        sys.exit("name must be lowercase letters, digits or hyphens, at most 32 characters")
+    app.init_db()
+    role = "admin" if args.admin else "agent"
+    token = secrets.token_hex(32)
+    with sqlite3.connect(app.DB) as c:
+        if c.execute("SELECT 1 FROM agents WHERE name=?", (args.name,)).fetchone():
+            sys.exit(f"{args.name} already exists")
+        c.execute("INSERT INTO agents(name,token_hash,role,active) VALUES(?,?,?,1)",
+                  (args.name, hashlib.sha256(token.encode()).hexdigest(), role))
+    print(f"created {role} {args.name}")
+    if args.admin:
+        print(f"admin token (shown once): {token}")
+        return
+    link = secrets.token_hex(24)
+    target = app.BASE / "downloads"
+    target.mkdir(mode=0o700, exist_ok=True)
+    write_access_file(args.name, token, target / f"{link}.md")
+    print(f"one-time link, valid 24 hours: {app.PUBLIC_URL}/dl/{link}")
+
+
+def disable(args):
+    with sqlite3.connect(app.DB) as c:
+        done = c.execute("UPDATE agents SET active=0 WHERE name=?", (args.name,)).rowcount
+    print("disabled" if done else "no such agent")
+
+
+def show(_):
+    with sqlite3.connect(app.DB) as c:
+        for name, role, active in c.execute("SELECT name,role,active FROM agents ORDER BY name"):
+            print(f"{name:32} {role:6} {'active' if active else 'disabled'}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("add", help="create an agent and a one-time link to its access file")
+    p.add_argument("name")
+    p.add_argument("--admin", action="store_true", help="create the owner login instead")
+    p.set_defaults(func=add)
+    p = sub.add_parser("disable", help="switch off an agent's token")
+    p.add_argument("name")
+    p.set_defaults(func=disable)
+    sub.add_parser("list", help="list agents").set_defaults(func=show)
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

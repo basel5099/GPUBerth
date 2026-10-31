@@ -1,0 +1,33 @@
+#!/bin/bash
+# Runs on the storage VM. Exports one agent's folder and the common folder to one seat only.
+# gpuberth-share add <seat-ip> <agent> | del <seat-ip>
+set -e
+ROOT=/srv
+source /etc/gpuberth/storage.env  # SEAT_IPS, AGENT_UID
+OPTS=rw,sync,secure,subtree_check,all_squash,anonuid=$AGENT_UID,anongid=$AGENT_UID
+action=$1; ip=$2; agent=$3
+
+[[ " $SEAT_IPS " == *" $ip "* ]] || { echo "bad seat" >&2; exit 2; }
+
+drop() {
+  exportfs -s 2>/dev/null | awk -v ip="$1" '$2 ~ "^" ip "\\(" {print $1}' | while read -r path; do
+    exportfs -u "$1:$path"
+  done
+}
+
+case "$action" in
+  add)
+    [[ "$agent" =~ ^[a-z0-9-]{1,32}$ ]] || { echo "bad agent" >&2; exit 2; }
+    drop "$ip"
+    mkdir -p "$ROOT/agents/$agent" "$ROOT/common"
+    chown "$AGENT_UID:$AGENT_UID" "$ROOT/agents/$agent" "$ROOT/common"
+    exportfs -o "$OPTS" "$ip:$ROOT/agents/$agent"
+    exportfs -o "$OPTS" "$ip:$ROOT/common"
+    ;;
+  del)
+    drop "$ip"
+    ;;
+  *)
+    echo "bad action" >&2; exit 2
+    ;;
+esac

@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+# Sends the Wake-on-LAN packet for the GPU host. Run on an always-on machine on the same LAN.
+# authorized_keys: from="BROKER_IP",command="/usr/local/sbin/gpuberth-wake",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ssh-ed25519 ...
+import socket
+from pathlib import Path
+
+config = dict(line.strip().split("=", 1) for line in Path("/etc/gpuberth/wake.env").read_text().split("\n") if "=" in line)
+packet = b"\xff" * 6 + bytes.fromhex(config["MAC"].replace(":", "")) * 16
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, config["INTERFACE"].encode())
+for _ in range(3):
+    s.sendto(packet, (config["BROADCAST"], 9))

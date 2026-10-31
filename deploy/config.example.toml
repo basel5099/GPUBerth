@@ -1,0 +1,31 @@
+# GPUBerth broker config: /etc/gpuberth/config.toml
+data_dir = "/var/lib/gpuberth"
+public_url = "https://gpu.example.com"   # where agents reach the API
+public_host = "203.0.113.10"             # public IP agents connect to by SSH
+host_ssh = "root@192.0.2.20"             # GPU host, locked to gpuberth-ctl
+wake_ssh = "root@192.0.2.10"             # always-on LAN machine, locked to gpuberth-wake; "" if not used
+vm_gateway = "192.0.2.1"                 # address the broker uses to reach seat SSH ports
+total_gpus = 2
+
+[limits]
+min_hours = 0.25
+max_hours = 8
+daily_hours = 16
+max_open = 2
+warn_seconds = 600
+pool_limit_pct = 90
+
+# The first seat should allow every GPU count. Each seat is one VM with its own isolated network.
+[[seats]]
+name = "a"
+ssh_port = 6050
+ports = [6051, 6052, 6053, 6054]
+storage_ip = "10.50.0.2"
+gpus = [1, 2]
+
+[[seats]]
+name = "b"
+ssh_port = 6055
+ports = [6056, 6057, 6058, 6059]
+storage_ip = "10.51.0.2"
+gpus = [1]
