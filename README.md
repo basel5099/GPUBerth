@@ -6,6 +6,10 @@ You own a few powerful GPUs and run many AI agents. GPUBerth lets each agent res
 simple API, work in its own isolated VM for a fixed time, keep its files, and share large models
 with the other agents. The machine wakes up when it is needed and powers off when it is not.
 
+[![GPUBerth explained in one minute](assets/gpuberth-explainer.gif)](assets/gpuberth-explainer.mp4)
+
+*Click for the full video. It was drawn entirely with code: see [assets/make_video.py](assets/make_video.py).*
+
 > **Status: early.** GPUBerth was extracted from a private deployment on Proxmox VE with two
 > RTX 5090 cards, where it was tested on real hardware. This generic, config-driven version has
 > passed the simulated scheduler tests, but **it has not yet been installed from scratch**. Expect
